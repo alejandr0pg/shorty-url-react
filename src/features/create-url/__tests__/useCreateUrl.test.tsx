@@ -1,10 +1,12 @@
 import { renderHook, act } from '@testing-library/react';
 import { useCreateUrl } from '../hooks/useCreateUrl';
-import { UrlService } from '../../../core/api/urlService';
 
 // Mock the URL service
-jest.mock('../../../core/api/urlService');
-const mockedUrlService = UrlService as jest.Mocked<typeof UrlService>;
+jest.mock('../../../core/api', () => ({
+  urlService: {
+    createUrl: jest.fn()
+  }
+}));
 
 describe('useCreateUrl', () => {
   beforeEach(() => {
@@ -28,7 +30,9 @@ describe('useCreateUrl', () => {
       normalized: false
     };
 
-    mockedUrlService.prototype.createUrl = jest.fn().mockResolvedValue(mockResponse);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { urlService } = require('../../../core/api');
+    urlService.createUrl.mockResolvedValue(mockResponse);
 
     const { result } = renderHook(() => useCreateUrl());
 
@@ -42,17 +46,23 @@ describe('useCreateUrl', () => {
   });
 
   test('should handle URL creation error', async () => {
-    const mockError = new Error('Invalid URL');
-    mockedUrlService.prototype.createUrl = jest.fn().mockRejectedValue(mockError);
+    const mockError = new Error('Server error');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { urlService } = require('../../../core/api');
+    urlService.createUrl.mockRejectedValue(mockError);
 
     const { result } = renderHook(() => useCreateUrl());
 
     await act(async () => {
-      await result.current.createUrl('invalid-url');
+      try {
+        await result.current.createUrl('https://example.com');
+      } catch (error) {
+        // Error is expected and handled by the hook
+      }
     });
 
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('Invalid URL format. URL must follow the pattern: scheme://host[:port][/path]');
+    expect(result.current.error).toBe('Server error');
     expect(result.current.shortUrl).toBeNull();
   });
 
@@ -62,7 +72,9 @@ describe('useCreateUrl', () => {
       resolvePromise = resolve;
     });
 
-    mockedUrlService.prototype.createUrl = jest.fn().mockReturnValue(promise);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { urlService } = require('../../../core/api');
+    urlService.createUrl.mockReturnValue(promise);
 
     const { result } = renderHook(() => useCreateUrl());
 

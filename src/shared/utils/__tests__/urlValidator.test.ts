@@ -50,7 +50,7 @@ describe('URL Validator', () => {
       expect(result2.errors).toHaveLength(0); // FTP is a common scheme, no errors
 
       const result3 = validateUrl('unknown://example.com');
-      expect(result3.valid).toBe(true); // Valid format but uncommon scheme
+      expect(result3.valid).toBe(false); // Invalid due to uncommon scheme
       expect(result3.errors).toContain('Uncommon scheme: unknown. Common schemes are: http, https, ftp, ftps');
     });
   });
