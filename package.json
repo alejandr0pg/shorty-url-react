@@ -58,6 +58,6 @@
         "jest-environment-jsdom": "^30.1.2",
         "rollup-plugin-visualizer": "^5.9.0",
         "typescript": "^5.9.2",
-        "vite-plugin-pwa": "^0.17.0"
+        "vite-plugin-pwa": "^0.21.1"
     }
 }
