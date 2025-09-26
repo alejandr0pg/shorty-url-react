@@ -25,7 +25,7 @@ const UrlListPage: React.FC = () => {
   }, [urls, searchTerm]);
 
   const handleUpdate = async (id: number, newUrl: string): Promise<void> => {
-    await updateUrl(id, { url: newUrl });
+    await updateUrl(id, { original_url: newUrl });
   };
 
   const handleDelete = async (id: number): Promise<void> => {

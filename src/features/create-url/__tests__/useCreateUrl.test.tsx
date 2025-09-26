@@ -38,7 +38,7 @@ describe('useCreateUrl', () => {
 
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(result.current.result).toEqual(mockResponse);
+    expect(result.current.shortUrl).toEqual(mockResponse.short_url);
   });
 
   test('should handle URL creation error', async () => {
@@ -70,7 +70,7 @@ describe('useCreateUrl', () => {
       result.current.createUrl('https://example.com');
     });
 
-    expect(result.current.isLoading).toBe(true);
+    expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
 
     await act(async () => {
