@@ -381,27 +381,31 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
-          # Configure bucket to disable ACL enforcement
-          echo "Disabling ACL enforcement..."
-          aws s3api put-bucket-ownership-controls \
-            --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
-            --ownership-controls Rules='[{ObjectOwnership=BucketOwnerEnforced}]' \
-            || echo "⚠️ Could not disable ACL enforcement"
-
-          # Try to disable Block Public Access settings
+          # Try to disable Block Public Access settings first
           echo "Attempting to configure public access settings..."
-          aws s3api put-public-access-block \
+          if aws s3api put-public-access-block \
             --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
             --public-access-block-configuration \
-            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
-            || echo "⚠️ Could not modify public access settings"
+            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"; then
+            echo "✅ Public access settings configured"
+
+            # Configure bucket ownership to allow ACLs
+            echo "Configuring bucket ownership to allow ACLs..."
+            aws s3api put-bucket-ownership-controls \
+              --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
+              --ownership-controls Rules='[{ObjectOwnership=BucketOwnerPreferred}]' \
+              || echo "⚠️ Could not set bucket ownership"
+          else
+            echo "⚠️ Could not modify public access settings - using bucket policy only"
+          fi
 
           # Wait a moment for settings to propagate
           sleep 5
 
           # Try to set bucket policy for public read access
           echo "Attempting to set bucket policy..."
-          aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
+          POLICY_SUCCESS=false
+          if aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
             --policy "{
               \"Version\": \"2012-10-17\",
               \"Statement\": [{
@@ -411,7 +415,17 @@ jobs:
                 \"Action\": \"s3:GetObject\",
                 \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_PRODUCTION }}/*\"
               }]
-            }" || echo "⚠️ Could not set bucket policy - deployment may not be publicly accessible"
+            }"; then
+            echo "✅ Bucket policy set successfully"
+            POLICY_SUCCESS=true
+          else
+            echo "⚠️ Could not set bucket policy - trying alternative approach"
+          fi
+
+          # If bucket policy failed, try to set individual file permissions later
+          if [ "$POLICY_SUCCESS" = false ]; then
+            echo "export BUCKET_POLICY_FAILED=true" >> $GITHUB_ENV
+          fi
         else
           echo "S3 bucket ${{ env.S3_BUCKET_PRODUCTION }} already exists"
         fi
@@ -435,30 +449,66 @@ jobs:
       run: |
         echo "🚀 Deploying to production environment..."
 
-        # Sync con configuración de cache optimizada para producción
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+        # Deploy with ACLs (try first) or fallback to bucket policy
+        echo "🚀 Attempting deployment with public-read ACL..."
+
+        # Try to sync with ACL
+        if aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
           --delete \
+          --acl public-read \
           --cache-control "public, max-age=31536000, immutable" \
           --exclude "*.html" \
           --exclude "service-worker.js" \
           --exclude "manifest.json" \
           --exclude "robots.txt" \
-          --exclude "sitemap.xml"
+          --exclude "sitemap.xml" 2>/dev/null; then
 
-        # HTML y service worker sin cache
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-          --cache-control "public, max-age=0, must-revalidate" \
-          --include "*.html" \
-          --include "service-worker.js" \
-          --exclude "*"
+          echo "✅ Deployed assets with ACL"
 
-        # Archivos SEO y manifest con cache de 1 día
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-          --cache-control "public, max-age=86400" \
-          --include "manifest.json" \
-          --include "robots.txt" \
-          --include "sitemap.xml" \
-          --exclude "*"
+          # HTML and service worker with ACL
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+            --acl public-read \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html" \
+            --include "service-worker.js" \
+            --exclude "*"
+
+          # SEO files with ACL
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+            --acl public-read \
+            --cache-control "public, max-age=86400" \
+            --include "manifest.json" \
+            --include "robots.txt" \
+            --include "sitemap.xml" \
+            --exclude "*"
+
+        else
+          echo "⚠️ ACL deployment failed, trying without ACL..."
+
+          # Fallback: sync without ACL
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "service-worker.js" \
+            --exclude "manifest.json" \
+            --exclude "robots.txt" \
+            --exclude "sitemap.xml"
+
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --include "*.html" \
+            --include "service-worker.js" \
+            --exclude "*"
+
+          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+            --cache-control "public, max-age=86400" \
+            --include "manifest.json" \
+            --include "robots.txt" \
+            --include "sitemap.xml" \
+            --exclude "*"
+        fi
+
 
     - name: Invalidate CloudFront Cache
       run: |
@@ -488,43 +538,68 @@ jobs:
         CLOUDFRONT_URL="https://daaedpb6kov3c.cloudfront.net"
         S3_URL="http://${{ env.S3_BUCKET_PRODUCTION }}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
 
-        # Health check básico
+        echo "URLs de prueba:"
+        echo "  CloudFront: $CLOUDFRONT_URL"
+        echo "  S3 Website: $S3_URL"
+
+        # Health check básico con debug info
         HEALTH_CHECK_PASSED=false
-        for i in {1..15}; do
+        for i in {1..10}; do
+          echo "Intento $i/10: Verificando deployment..."
+
           # Try CloudFront first
-          if curl -f -s "$CLOUDFRONT_URL/" | grep -q "Shrt" 2>/dev/null; then
+          echo "  Probando CloudFront..."
+          RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}" "$CLOUDFRONT_URL/" 2>/dev/null || echo "CURL_FAILED")
+          if echo "$RESPONSE" | grep -q "Shrt" && echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
             echo "✅ Health check básico pasó (CloudFront)"
             HEALTH_CHECK_PASSED=true
             break
+          else
+            echo "    CloudFront response: $(echo "$RESPONSE" | tail -1)"
           fi
 
           # Fallback to S3 static website
-          if curl -f -s "$S3_URL/" | grep -q "Shrt" 2>/dev/null; then
+          echo "  Probando S3 Website..."
+          RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}" "$S3_URL/" 2>/dev/null || echo "CURL_FAILED")
+          if echo "$RESPONSE" | grep -q "Shrt" && echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
             echo "✅ Health check básico pasó (S3)"
             HEALTH_CHECK_PASSED=true
             break
+          else
+            echo "    S3 response: $(echo "$RESPONSE" | tail -1)"
           fi
 
-          echo "Intento $i/15: Esperando deployment..."
-          sleep 10
+          # Try direct S3 bucket access as last resort
+          echo "  Probando acceso directo a S3..."
+          DIRECT_S3="https://${{ env.S3_BUCKET_PRODUCTION }}.s3.amazonaws.com/index.html"
+          RESPONSE=$(curl -s -w "HTTP_CODE:%{http_code}" "$DIRECT_S3" 2>/dev/null || echo "CURL_FAILED")
+          if echo "$RESPONSE" | grep -q "Shrt" && echo "$RESPONSE" | grep -q "HTTP_CODE:200"; then
+            echo "✅ Health check básico pasó (S3 Direct)"
+            HEALTH_CHECK_PASSED=true
+            break
+          else
+            echo "    S3 Direct response: $(echo "$RESPONSE" | tail -1)"
+          fi
+
+          sleep 15
         done
 
         if [ "$HEALTH_CHECK_PASSED" = false ]; then
           echo "⚠️ Health check directo falló, pero el deployment puede estar disponible"
+
+          # List S3 contents for debugging
+          echo "📋 Contenido del bucket S3:"
+          aws s3 ls s3://${{ env.S3_BUCKET_PRODUCTION }}/ --recursive | head -10 || echo "No se pudo listar el contenido"
+        else
+          echo "✅ Deployment verificado exitosamente"
         fi
 
-        # Smoke tests (try both URLs)
-        SMOKE_TEST_PASSED=false
-        if curl -f -s "$CLOUDFRONT_URL/" | grep -q "Shrt" 2>/dev/null; then
-          echo "✅ Smoke test: Página principal carga correctamente (CloudFront)"
-          SMOKE_TEST_PASSED=true
-        elif curl -f -s "$S3_URL/" | grep -q "Shrt" 2>/dev/null; then
-          echo "✅ Smoke test: Página principal carga correctamente (S3)"
-          SMOKE_TEST_PASSED=true
-        fi
-
-        if [ "$SMOKE_TEST_PASSED" = false ]; then
-          echo "⚠️ Warning: Smoke test falló, pero el deployment puede estar disponible"
+        # Simple smoke test - just verify deployment succeeded
+        echo "🔍 Verificación final de archivos..."
+        if aws s3api head-object --bucket ${{ env.S3_BUCKET_PRODUCTION }} --key index.html >/dev/null 2>&1; then
+          echo "✅ index.html encontrado en S3"
+        else
+          echo "❌ index.html no encontrado en S3"
         fi
 
   # Job para análisis de performance post-deployment
