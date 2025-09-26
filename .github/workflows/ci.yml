@@ -99,10 +99,10 @@ jobs:
         environment: [staging, production]
         include:
           - environment: staging
-            api_url: https://staging-api.tu-dominio.com
+            api_url: http://shrt-production-alb-132772302.us-east-1.elb.amazonaws.com
             deploy_condition: github.ref == 'refs/heads/develop'
           - environment: production
-            api_url: https://api.tu-dominio.com
+            api_url: http://shrt-production-alb-132772302.us-east-1.elb.amazonaws.com
             deploy_condition: github.ref == 'refs/heads/main'
 
     steps:
@@ -180,7 +180,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment:
       name: staging
-      url: https://staging.tu-dominio.com
+      url: https://d2570b9eh3h8yc.cloudfront.net
 
     steps:
     - name: Download Build Artifacts
@@ -245,7 +245,6 @@ jobs:
         done
 
     - name: Invalidate CloudFront Cache
-      if: env.CLOUDFRONT_DISTRIBUTION_STAGING
       run: |
         aws cloudfront create-invalidation \
           --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_STAGING }} \
@@ -256,7 +255,7 @@ jobs:
     - name: Health Check
       run: |
         echo "🔍 Verificando deployment..."
-        STAGING_URL="https://staging.tu-dominio.com"
+        STAGING_URL="https://d2570b9eh3h8yc.cloudfront.net"
 
         for i in {1..10}; do
           if curl -f -s "$STAGING_URL/health" > /dev/null; then
@@ -277,7 +276,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
-      url: https://tu-dominio.com
+      url: https://daaedpb6kov3c.cloudfront.net
 
     steps:
     - name: Download Build Artifacts
@@ -348,7 +347,7 @@ jobs:
     - name: Health Check & Smoke Tests
       run: |
         echo "🔍 Ejecutando health checks de producción..."
-        PRODUCTION_URL="https://tu-dominio.com"
+        PRODUCTION_URL="https://daaedpb6kov3c.cloudfront.net"
 
         # Health check básico
         for i in {1..15}; do
@@ -402,7 +401,7 @@ jobs:
       if: needs.deploy-staging.result == 'success'
       run: |
         lhci autorun \
-          --collect.url=https://staging.tu-dominio.com \
+          --collect.url=https://d2570b9eh3h8yc.cloudfront.net \
           --upload.target=temporary-public-storage \
           --collect.numberOfRuns=3
       continue-on-error: true
@@ -411,7 +410,7 @@ jobs:
       if: needs.deploy-production.result == 'success'
       run: |
         lhci autorun \
-          --collect.url=https://tu-dominio.com \
+          --collect.url=https://daaedpb6kov3c.cloudfront.net \
           --upload.target=temporary-public-storage \
           --collect.numberOfRuns=5
       continue-on-error: true
