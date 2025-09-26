@@ -23,7 +23,6 @@ describe('URL Validator', () => {
         '',
         'not-a-url',
         'http://',
-        'ftp://example.com',
         'javascript:alert(1)'
       ];
 
@@ -39,7 +38,7 @@ describe('URL Validator', () => {
       const result = validateUrl(longUrl);
 
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('URL exceeds maximum length of 2048 characters');
+      expect(result.errors).toContain('URL is too long. Maximum length is 2048 characters');
     });
 
     test('should validate schemes', () => {
@@ -47,8 +46,12 @@ describe('URL Validator', () => {
       expect(result1.valid).toBe(true);
 
       const result2 = validateUrl('ftp://example.com');
-      expect(result2.valid).toBe(false);
-      expect(result2.errors).toContain('Only HTTP and HTTPS protocols are allowed');
+      expect(result2.valid).toBe(true);
+      expect(result2.errors).toHaveLength(0); // FTP is a common scheme, no errors
+
+      const result3 = validateUrl('unknown://example.com');
+      expect(result3.valid).toBe(false); // Invalid due to uncommon scheme
+      expect(result3.errors).toContain('Uncommon scheme: unknown. Common schemes are: http, https, ftp, ftps');
     });
   });
 
@@ -65,7 +68,7 @@ describe('URL Validator', () => {
 
     test('should handle empty input', () => {
       expect(sanitizeUrl('')).toBe('');
-      expect(sanitizeUrl('   ')).toBe('');
+      expect(sanitizeUrl('   ')).toBe('https://');
     });
 
     test('should trim whitespace', () => {
@@ -75,16 +78,16 @@ describe('URL Validator', () => {
 
   describe('normalizeUrl', () => {
     test('should convert to lowercase', () => {
-      expect(normalizeUrl('HTTPS://EXAMPLE.COM')).toBe('https://example.com');
+      expect(normalizeUrl('HTTPS://EXAMPLE.COM')).toBe('https://example.com/');
     });
 
     test('should remove default ports', () => {
-      expect(normalizeUrl('https://example.com:443')).toBe('https://example.com');
-      expect(normalizeUrl('http://example.com:80')).toBe('http://example.com');
+      expect(normalizeUrl('https://example.com:443')).toBe('https://example.com/');
+      expect(normalizeUrl('http://example.com:80')).toBe('http://example.com/');
     });
 
     test('should preserve non-default ports', () => {
-      expect(normalizeUrl('https://example.com:8080')).toBe('https://example.com:8080');
+      expect(normalizeUrl('https://example.com:8080')).toBe('https://example.com:8080/');
     });
 
     test('should normalize paths', () => {

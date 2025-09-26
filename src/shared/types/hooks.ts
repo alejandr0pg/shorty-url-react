@@ -2,7 +2,8 @@
  * Custom hooks types
  */
 
-import { Url, UpdateUrlRequest } from './domain';
+import { Url } from './domain';
+import { UpdateUrlRequest } from './api';
 
 // Generic API hook types
 export interface UseApiState<T> {

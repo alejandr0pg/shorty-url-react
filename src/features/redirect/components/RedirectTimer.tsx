@@ -10,12 +10,14 @@ import { ROUTES } from '../../../core/constants/config';
 interface RedirectTimerProps {
   code: string;
   countdown: number;
+  destinationUrl?: string | null;
   className?: string;
 }
 
 const RedirectTimer: React.FC<RedirectTimerProps> = ({
   code,
   countdown,
+  destinationUrl,
   className
 }) => {
   return (
@@ -36,7 +38,7 @@ const RedirectTimer: React.FC<RedirectTimerProps> = ({
       <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
         <div
           className="bg-blue-600 h-2 rounded-full transition-all duration-1000 ease-linear"
-          style={{ width: `${((5 - countdown) / 5) * 100}%` }}
+          style={{ width: `${((10 - countdown) / 10) * 100}%` }}
         />
       </div>
 
@@ -45,6 +47,15 @@ const RedirectTimer: React.FC<RedirectTimerProps> = ({
           Código: <span className="font-mono font-medium">{code}</span>
         </p>
 
+        {destinationUrl && (
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600 mb-1">Destino:</p>
+            <p className="text-sm font-medium text-gray-800 break-all">
+              {destinationUrl}
+            </p>
+          </div>
+        )}
+
         <div className="pt-4 border-t border-gray-200">
           <p className="text-sm text-gray-500 mb-3">
             Si no eres redirigido automáticamente:
@@ -52,7 +63,7 @@ const RedirectTimer: React.FC<RedirectTimerProps> = ({
 
           <div className="space-y-2">
             <a
-              href={`/${code}`}
+              href={destinationUrl || `/${code}`}
               className="block w-full text-center py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
             >
               Hacer clic aquí

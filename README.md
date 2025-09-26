@@ -1,6 +1,61 @@
 # Shrt Frontend - React Application
 
-Una aplicación React moderna para el servicio de acortamiento de URLs Shrt, construida con TypeScript, Vite y configurada para despliegue en AWS S3.
+Una aplicación React moderna para el servicio de acortamiento de URLs Shrt, construida con TypeScript, Vite y configurada para despliegue en AWS S3 con CloudFront CDN.
+
+## 🌐 URLs del Sistema Completo
+
+### 🚀 Producción (Funcionando ✅)
+
+- **🖥️ Frontend:** https://d3dcezd6ji3gto.cloudfront.net
+- **⚡ Backend API:** http://shrt-production-alb-132772302.us-east-1.elb.amazonaws.com/api
+- **📦 S3 Website:** http://shrt-frontend-production.s3-website-us-east-1.amazonaws.com
+- **🪣 Bucket S3:** https://shrt-frontend-production.s3.amazonaws.com
+
+### 🧪 Staging
+
+- **🖥️ Frontend:** https://d1mrphf40jf3dj.cloudfront.net
+- **⚡ Backend API:** http://shrt-production-alb-132772302.us-east-1.elb.amazonaws.com/api
+- **📦 S3 Website:** http://shrt-frontend-staging.s3-website-us-east-1.amazonaws.com
+
+### Infraestructura AWS
+
+- **🔗 Application Load Balancer:** shrt-production-alb-132772302.us-east-1.elb.amazonaws.com
+- **🎯 Target Group:** shrt-production-tg (para ECS backend services)
+- **☁️ CloudFront Distributions:**
+  - Staging: E2Q0FJ804E8MGI → d1mrphf40jf3dj.cloudfront.net
+  - Production: E1JT122OSSCK8R → d3dcezd6ji3gto.cloudfront.net
+
+## 🔐 Configuración de GitHub Actions
+
+### GitHub Secrets Requeridos
+
+Ve a tu repositorio GitHub → Settings → Secrets and variables → Actions:
+
+```bash
+# Credenciales AWS (REQUERIDOS)
+AWS_ACCESS_KEY_ID=[TU_ACCESS_KEY_ID]
+AWS_SECRET_ACCESS_KEY=[TU_SECRET_ACCESS_KEY]
+
+# CloudFront Distribution IDs (REQUERIDOS para usar distribuciones existentes)
+CLOUDFRONT_DISTRIBUTION_STAGING=E2Q0FJ804E8MGI
+CLOUDFRONT_DISTRIBUTION_PRODUCTION=E1JT122OSSCK8R  # ← Configuración ACTUAL
+
+# ⚠️ IMPORTANTE: El Distribution ID de producción debe ser E1JT122OSSCK8R
+# para usar la distribución que funciona correctamente (d3dcezd6ji3gto.cloudfront.net)
+
+# Si no configuras estos secrets, el workflow creará automáticamente
+# nuevas distribuciones CloudFront con la configuración correcta
+```
+
+### Variables de Entorno del Proyecto
+
+Configuradas automáticamente en el workflow:
+
+```bash
+S3_BUCKET_STAGING=shrt-frontend-staging
+S3_BUCKET_PRODUCTION=shrt-frontend-production
+AWS_REGION=us-east-1
+```
 
 ## 📋 Tabla de Contenidos
 
@@ -36,6 +91,7 @@ aws --version
 ### Instalación de dependencias del sistema
 
 **macOS:**
+
 ```bash
 # Instalar Node.js con Homebrew
 brew install node
@@ -45,6 +101,7 @@ brew install awscli
 ```
 
 **Ubuntu/Debian:**
+
 ```bash
 # Instalar Node.js
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
@@ -127,17 +184,20 @@ npm run test:coverage
 El proyecto está configurado para trabajar con tres entornos:
 
 ### Development (local)
+
 ```bash
 npm run dev
 ```
 
 ### Staging
+
 ```bash
 npm run build:staging
 npm run preview
 ```
 
 ### Production
+
 ```bash
 npm run build:production
 npm run preview
@@ -184,6 +244,75 @@ npm run deploy:staging
 npm run deploy:production
 ```
 
+## 🚀 Deployment Completo desde Cero
+
+### Comandos para Deployment Inicial
+
+```bash
+# 1. Configurar AWS CLI
+aws configure
+# AWS Access Key ID: [TU_ACCESS_KEY]
+# AWS Secret Access Key: [TU_SECRET_KEY]
+# Default region: us-east-1
+# Default output format: json
+
+# 2. Crear buckets S3
+aws s3 mb s3://shrt-frontend-production
+aws s3 mb s3://shrt-frontend-staging
+
+# 3. Configurar buckets para hosting estático
+aws s3 website s3://shrt-frontend-production \
+  --index-document index.html \
+  --error-document index.html
+
+aws s3 website s3://shrt-frontend-staging \
+  --index-document index.html \
+  --error-document index.html
+
+# 4. Configurar permisos públicos (deshabilitar Block Public Access)
+aws s3api put-public-access-block \
+  --bucket shrt-frontend-production \
+  --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+aws s3api put-public-access-block \
+  --bucket shrt-frontend-staging \
+  --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+# 5. Aplicar políticas de bucket para acceso público
+aws s3api put-bucket-policy --bucket shrt-frontend-production --policy '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::shrt-frontend-production/*"
+    }
+  ]
+}'
+
+aws s3api put-bucket-policy --bucket shrt-frontend-staging --policy '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::shrt-frontend-staging/*"
+    }
+  ]
+}'
+
+# 6. Construir y desplegar la aplicación
+npm run build:production
+aws s3 sync dist/ s3://shrt-frontend-production --delete
+
+# 7. Verificar el despliegue
+echo "Frontend disponible en: http://shrt-frontend-production.s3-website-us-east-1.amazonaws.com"
+```
+
 ## ☁️ Configuración de AWS
 
 ### Paso 1: Configurar AWS CLI
@@ -204,12 +333,36 @@ aws configure
 ### Paso 2: Crear Buckets S3
 
 ```bash
-# Crear buckets para cada entorno (reemplaza TU-DOMINIO con tu dominio real)
-aws s3 mb s3://TU-DOMINIO-frontend-staging --region us-east-1
-aws s3 mb s3://TU-DOMINIO-frontend-production --region us-east-1
+# Crear bucket de producción
+aws s3 mb s3://shrt-frontend-production
 
-# Verificar que se crearon correctamente
-aws s3 ls | grep TU-DOMINIO-frontend
+# Crear bucket de staging
+aws s3 mb s3://shrt-frontend-staging
+
+# Verificar buckets creados
+aws s3 ls | grep shrt-frontend
+
+# Configurar bucket de producción para hosting estático
+aws s3 website s3://shrt-frontend-production \
+  --index-document index.html \
+  --error-document index.html
+
+# Configurar bucket de staging para hosting estático
+aws s3 website s3://shrt-frontend-staging \
+  --index-document index.html \
+  --error-document index.html
+```
+
+### Paso 2.1: CloudFront Distributions (Ya Creadas)
+
+```bash
+# Distribuciones CloudFront creadas:
+# Staging:    EMGOF3DHVN1IP  -> https://d2570b9eh3h8yc.cloudfront.net
+# Production: E2IC4GJDJKZPKW -> https://daaedpb6kov3c.cloudfront.net
+
+# Verificar estado de las distribuciones
+aws cloudfront get-distribution --id EMGOF3DHVN1IP --query 'Distribution.Status'
+aws cloudfront get-distribution --id E2IC4GJDJKZPKW --query 'Distribution.Status'
 ```
 
 ### Paso 3: Configurar Hosting Estático
@@ -548,15 +701,15 @@ npm test -- --testPathPattern=components
 
 ```javascript
 // src/components/__tests__/Button.test.tsx
-import { render, screen } from '@testing-library/react'
-import { Button } from '../Button'
+import { render, screen } from "@testing-library/react";
+import { Button } from "../Button";
 
-describe('Button', () => {
-  it('renders correctly', () => {
-    render(<Button>Click me</Button>)
-    expect(screen.getByText('Click me')).toBeInTheDocument()
-  })
-})
+describe("Button", () => {
+  it("renders correctly", () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByText("Click me")).toBeInTheDocument();
+  });
+});
 ```
 
 ## 📊 Monitoreo y Performance
@@ -580,6 +733,7 @@ npm run analyze
 ### Problemas comunes y soluciones
 
 #### Error: "Module not found"
+
 ```bash
 # Limpiar cache de npm
 npm cache clean --force
@@ -590,6 +744,7 @@ npm install
 ```
 
 #### Error de tipos de TypeScript
+
 ```bash
 # Verificar configuración
 npm run typecheck
@@ -599,6 +754,7 @@ npm run build
 ```
 
 #### Problemas con el despliegue a S3
+
 ```bash
 # Verificar credenciales de AWS
 aws sts get-caller-identity
@@ -608,7 +764,9 @@ aws s3api get-bucket-policy --bucket shrt-frontend-production
 ```
 
 #### Error de CORS en desarrollo
+
 Añade a tu `.env.local`:
+
 ```env
 VITE_API_URL=http://localhost:8000
 ```

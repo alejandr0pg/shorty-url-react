@@ -8,10 +8,16 @@ import {
   Url,
   CreateUrlRequest,
   CreateUrlResponse,
-  UpdateUrlRequest
+  UpdateUrlRequest,
+  LaravelPaginatedResponse
 } from '../../shared/types';
 
 export class UrlService {
+  constructor() {
+    // Ensure device ID is set on the API client
+    this.initializeDeviceId();
+  }
+
   /**
    * Creates a new shortened URL
    */
@@ -30,8 +36,20 @@ export class UrlService {
    */
   async getUrls(): Promise<Url[]> {
     try {
-      const response = await apiClient.get<Url[]>('/urls');
-      return response;
+      const response = await apiClient.get<LaravelPaginatedResponse<Url> | Url[]>('/urls');
+
+      // Handle paginated response from Laravel
+      if (response && typeof response === 'object' && 'data' in response) {
+        const paginatedResponse = response as LaravelPaginatedResponse<Url>;
+        return Array.isArray(paginatedResponse.data) ? paginatedResponse.data : [];
+      }
+
+      // Handle direct array response
+      if (Array.isArray(response)) {
+        return response;
+      }
+
+      return [];
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch URLs';
       throw new Error(message);
@@ -85,6 +103,19 @@ export class UrlService {
       return response;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch URL stats';
+      throw new Error(message);
+    }
+  }
+
+  /**
+   * Resolves a short code to get the destination URL
+   */
+  async resolveShortCode(code: string): Promise<{ original_url: string; short_url: string }> {
+    try {
+      const response = await apiClient.get<{ original_url: string; short_url: string }>(`/resolve/${code}`);
+      return response;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resolve short code';
       throw new Error(message);
     }
   }
@@ -163,11 +194,20 @@ export class UrlService {
       });
 
       const response = await apiClient.get<Url[]>(`/urls/search?${params}`);
-      return response;
+      // Ensure response is always an array
+      return Array.isArray(response) ? response : [];
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to search URLs';
       throw new Error(message);
     }
+  }
+
+  /**
+   * Initializes device ID and sets it on the API client
+   */
+  private initializeDeviceId(): void {
+    const deviceId = this.getDeviceId();
+    apiClient.setDeviceId(deviceId);
   }
 
   /**

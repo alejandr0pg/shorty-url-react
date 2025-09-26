@@ -6,7 +6,7 @@ import { useState, useCallback } from 'react';
 import { urlService } from '../../../core/api';
 import { validateUrl, sanitizeUrl } from '../../../shared/utils/urlValidator';
 import { UseCreateUrlResult } from '../../../shared/types';
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../core/constants/config';
+import { ERROR_MESSAGES } from '../../../core/constants/config';
 
 export const useCreateUrl = (): UseCreateUrlResult => {
   const [shortUrl, setShortUrl] = useState<string | null>(null);
@@ -30,6 +30,10 @@ export const useCreateUrl = (): UseCreateUrlResult => {
 
       // Create URL via API
       const response = await urlService.createUrl({ url: sanitizedUrl });
+
+      if (!response.short_url) {
+        throw new Error('API response missing short_url field');
+      }
 
       setShortUrl(response.short_url);
 

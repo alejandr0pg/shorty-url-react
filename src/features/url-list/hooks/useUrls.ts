@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { urlService } from '../../../core/api';
 import { Url, UseUrlsResult, UpdateUrlRequest } from '../../../shared/types';
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../core/constants/config';
+import { ERROR_MESSAGES } from '../../../core/constants/config';
 
 export const useUrls = (): UseUrlsResult => {
   const [urls, setUrls] = useState<Url[]>([]);
@@ -18,10 +18,12 @@ export const useUrls = (): UseUrlsResult => {
 
     try {
       const data = await urlService.getUrls();
-      setUrls(data);
+      // Ensure data is always an array
+      setUrls(Array.isArray(data) ? data : []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.UNKNOWN_ERROR;
       setError(errorMessage);
+      setUrls([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

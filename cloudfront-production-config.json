@@ -1,0 +1,93 @@
+{
+  "CallerReference": "shrt-production-frontend-2025-09-26",
+  "Comment": "Shrt Production Frontend CDN Distribution",
+  "DefaultRootObject": "index.html",
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "S3-shrt-frontend-production",
+        "DomainName": "shrt-frontend-production.s3-website-us-east-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "http-only"
+        }
+      }
+    ]
+  },
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "S3-shrt-frontend-production",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "TrustedSigners": {
+      "Enabled": false,
+      "Quantity": 0
+    },
+    "ForwardedValues": {
+      "QueryString": false,
+      "Cookies": {
+        "Forward": "none"
+      }
+    },
+    "MinTTL": 0,
+    "DefaultTTL": 86400,
+    "MaxTTL": 31536000,
+    "Compress": true
+  },
+  "CustomErrorResponses": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "ErrorCode": 404,
+        "ResponsePagePath": "/index.html",
+        "ResponseCode": "200",
+        "ErrorCachingMinTTL": 300
+      }
+    ]
+  },
+  "CacheBehaviors": {
+    "Quantity": 2,
+    "Items": [
+      {
+        "PathPattern": "/assets/*",
+        "TargetOriginId": "S3-shrt-frontend-production",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "TrustedSigners": {
+          "Enabled": false,
+          "Quantity": 0
+        },
+        "ForwardedValues": {
+          "QueryString": false,
+          "Cookies": {
+            "Forward": "none"
+          }
+        },
+        "MinTTL": 31536000,
+        "DefaultTTL": 31536000,
+        "MaxTTL": 31536000,
+        "Compress": true
+      },
+      {
+        "PathPattern": "*.js",
+        "TargetOriginId": "S3-shrt-frontend-production",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "TrustedSigners": {
+          "Enabled": false,
+          "Quantity": 0
+        },
+        "ForwardedValues": {
+          "QueryString": false,
+          "Cookies": {
+            "Forward": "none"
+          }
+        },
+        "MinTTL": 31536000,
+        "DefaultTTL": 31536000,
+        "MaxTTL": 31536000,
+        "Compress": true
+      }
+    ]
+  },
+  "Enabled": true,
+  "PriceClass": "PriceClass_All"
+}

@@ -2,13 +2,13 @@
  * Create URL Form component - Main form for URL shortening
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button, Alert } from '../../../shared/components';
 import UrlInput from './UrlInput';
 import { useCreateUrl } from '../hooks/useCreateUrl';
 
 interface CreateUrlFormProps {
-  onSuccess?: (shortUrl: string, originalUrl: string) => void;
+  onSuccess?: (originalUrl: string, shortUrl: string) => void;
   onError?: (error: string) => void;
   className?: string;
 }
@@ -20,7 +20,8 @@ const CreateUrlForm: React.FC<CreateUrlFormProps> = ({
 }) => {
   const [url, setUrl] = useState('');
   const [isValid, setIsValid] = useState(false);
-  const { createUrl, loading, error, reset } = useCreateUrl();
+  const [pendingOriginalUrl, setPendingOriginalUrl] = useState<string | null>(null);
+  const { createUrl, shortUrl, loading, error, reset } = useCreateUrl();
 
   const handleSubmit = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
@@ -30,17 +31,29 @@ const CreateUrlForm: React.FC<CreateUrlFormProps> = ({
     }
 
     try {
-      await createUrl(url.trim());
-      onSuccess?.(url, url.trim()); // This will be updated by the parent with the actual short URL
-      setUrl(''); // Clear form on success
+      const trimmedUrl = url.trim();
+      setPendingOriginalUrl(trimmedUrl);
+      await createUrl(trimmedUrl);
+      // onSuccess will be called via useEffect when shortUrl updates
     } catch (err) {
+      console.error('[CreateUrlForm] Error creating URL:', err);
       const errorMessage = err instanceof Error ? err.message : 'Error al crear URL';
       onError?.(errorMessage);
     }
-  }, [url, isValid, createUrl, onSuccess, onError]);
+  }, [url, isValid, createUrl, onError]);
+
+  // Effect to handle success when shortUrl updates
+  useEffect(() => {
+    if (shortUrl && pendingOriginalUrl) {
+      onSuccess?.(pendingOriginalUrl, shortUrl);
+      setUrl('');
+      setPendingOriginalUrl(null);
+    }
+  }, [shortUrl, pendingOriginalUrl, onSuccess]);
 
   const handleReset = useCallback(() => {
     setUrl('');
+    setPendingOriginalUrl(null);
     reset();
   }, [reset]);
 

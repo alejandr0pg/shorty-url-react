@@ -3,7 +3,8 @@
  * Handles authentication, error handling, and request/response processing
  */
 
-import { HttpClient, HttpClientConfig, ApiError } from '../../shared/types';
+import { HttpClient, HttpClientConfig, ApiError } from "../../shared/types";
+import { getEnvVar } from "../../utils/env";
 
 class ApiClient implements HttpClient {
   private baseURL: string;
@@ -11,12 +12,17 @@ class ApiClient implements HttpClient {
   private defaultHeaders: Record<string, string>;
 
   constructor(config: HttpClientConfig = {}) {
-    this.baseURL = config.baseURL || '/api';
-    this.timeout = config.timeout || 10000;
+    // Use the environment utility for cross-environment compatibility
+    const apiUrl = getEnvVar("VITE_API_URL", "/api");
+    const requestTimeout = getEnvVar("VITE_REQUEST_TIMEOUT", "10000");
+
+
+    this.baseURL = config.baseURL || apiUrl;
+    this.timeout = config.timeout || parseInt(requestTimeout);
     this.defaultHeaders = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...config.headers
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...config.headers,
     };
   }
 
@@ -33,9 +39,9 @@ class ApiClient implements HttpClient {
       ...options,
       headers: {
         ...this.defaultHeaders,
-        ...options.headers
+        ...options.headers,
       },
-      signal: AbortSignal.timeout(this.timeout)
+      signal: AbortSignal.timeout(this.timeout),
     };
 
     try {
@@ -46,17 +52,29 @@ class ApiClient implements HttpClient {
       }
 
       // Handle empty responses
-      const contentType = response.headers.get('content-type');
-      if (!contentType?.includes('application/json')) {
-        return {} as T;
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        // Return null instead of empty object to allow proper error handling
+        return null as T;
       }
 
-      return await response.json();
+      const jsonResponse = await response.json();
+
+      return jsonResponse;
     } catch (error) {
       if (error instanceof Error) {
+        // Check for network/connection errors
+        if (error.name === "AbortError") {
+          throw new Error("Request timed out - please try again");
+        }
+        if (error.message.includes("fetch")) {
+          throw new Error(
+            "Unable to connect to server - please check your connection"
+          );
+        }
         throw new Error(`API Request failed: ${error.message}`);
       }
-      throw new Error('Unknown API error occurred');
+      throw new Error("Unknown API error occurred");
     }
   }
 
@@ -64,12 +82,14 @@ class ApiClient implements HttpClient {
    * Handles error responses from the API
    */
   private async handleErrorResponse(response: Response): Promise<never> {
-    const contentType = response.headers.get('content-type');
+    const contentType = response.headers.get("content-type");
 
-    if (contentType?.includes('application/json')) {
+    if (contentType?.includes("application/json")) {
       try {
         const errorData: ApiError = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(
+          errorData.error || `HTTP ${response.status}: ${response.statusText}`
+        );
       } catch (parseError) {
         // If JSON parsing fails, fall back to status text
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -85,29 +105,37 @@ class ApiClient implements HttpClient {
   async get<T>(endpoint: string, config: RequestInit = {}): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
-      method: 'GET'
+      method: "GET",
     });
   }
 
   /**
    * POST request
    */
-  async post<T>(endpoint: string, data?: unknown, config: RequestInit = {}): Promise<T> {
+  async post<T>(
+    endpoint: string,
+    data?: unknown,
+    config: RequestInit = {}
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined
+      method: "POST",
+      body: data ? JSON.stringify(data) : undefined,
     });
   }
 
   /**
    * PUT request
    */
-  async put<T>(endpoint: string, data?: unknown, config: RequestInit = {}): Promise<T> {
+  async put<T>(
+    endpoint: string,
+    data?: unknown,
+    config: RequestInit = {}
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined
+      method: "PUT",
+      body: data ? JSON.stringify(data) : undefined,
     });
   }
 
@@ -117,18 +145,22 @@ class ApiClient implements HttpClient {
   async delete<T>(endpoint: string, config: RequestInit = {}): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
-      method: 'DELETE'
+      method: "DELETE",
     });
   }
 
   /**
    * PATCH request
    */
-  async patch<T>(endpoint: string, data?: unknown, config: RequestInit = {}): Promise<T> {
+  async patch<T>(
+    endpoint: string,
+    data?: unknown,
+    config: RequestInit = {}
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       ...config,
-      method: 'PATCH',
-      body: data ? JSON.stringify(data) : undefined
+      method: "PATCH",
+      body: data ? JSON.stringify(data) : undefined,
     });
   }
 
@@ -143,7 +175,7 @@ class ApiClient implements HttpClient {
    * Sets device ID header for all requests
    */
   setDeviceId(deviceId: string): void {
-    this.defaultHeaders['X-Device-ID'] = deviceId;
+    this.defaultHeaders["X-Device-ID"] = deviceId;
   }
 
   /**
@@ -169,9 +201,6 @@ class ApiClient implements HttpClient {
 }
 
 // Create and export singleton instance
-export const apiClient = new ApiClient({
-  baseURL: '/api',
-  timeout: 10000
-});
+export const apiClient = new ApiClient();
 
 export default apiClient;

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Runtime Config Test</title>
+    <!-- Simulate config.js loading like in S3 -->
+    <script>
+        // Simulate config.js content (what will be generated in S3)
+        window.__RUNTIME_CONFIG__ = {
+            "VITE_API_URL": "https://api.staging.example.com",
+            "VITE_API_BASE_URL": "/api",
+            "VITE_APP_URL": "https://staging.example.com",
+            "VITE_APP_ENV": "staging",
+            "VITE_APP_NAME": "Shrt",
+            "VITE_APP_VERSION": "1.0.0",
+            "VITE_COMMIT_HASH": "abc123def456",
+            "VITE_COMMIT_MESSAGE": "Deploy from main",
+            "VITE_GIT_BRANCH": "main",
+            "VITE_BUILD_TIME": "2025-09-26T15:30:00Z",
+            "VITE_REQUEST_TIMEOUT": "5000",
+            "VITE_ENABLE_DEBUG": "true",
+            "VITE_ENABLE_MONITORING": "false",
+            "VITE_SHOW_PERFORMANCE_METRICS": "true"
+        };
+
+        // Make it available globally
+        if (typeof window !== 'undefined') {
+            window.getEnvVar = function(key, fallback = '') {
+                return window.__RUNTIME_CONFIG__[key] || fallback;
+            };
+        }
+
+        console.log('🔧 Runtime config loaded:', window.__RUNTIME_CONFIG__);
+    </script>
+</head>
+<body>
+    <h1>S3 Runtime Config Test</h1>
+    <div id="test-results"></div>
+
+    <script>
+        // Test our getEnvVar function (same one used in React app)
+        function getEnvVar(key, fallback = "") {
+            // 1. Runtime config (loaded from config.js for S3 deployments)
+            if (typeof window !== 'undefined' && window.__RUNTIME_CONFIG__) {
+                const runtimeValue = window.__RUNTIME_CONFIG__[key];
+                if (runtimeValue !== undefined && runtimeValue !== '') {
+                    return runtimeValue;
+                }
+            }
+
+            // 2. import.meta.env (Vite's native way - not available in this test)
+            // 3. process.env fallback (not available in browser)
+
+            return fallback;
+        }
+
+        // Test the environment variables
+        const results = {
+            'VITE_API_URL': getEnvVar('VITE_API_URL', 'FALLBACK'),
+            'VITE_APP_ENV': getEnvVar('VITE_APP_ENV', 'FALLBACK'),
+            'VITE_APP_NAME': getEnvVar('VITE_APP_NAME', 'FALLBACK'),
+            'VITE_ENABLE_DEBUG': getEnvVar('VITE_ENABLE_DEBUG', 'FALLBACK'),
+            'NON_EXISTENT_VAR': getEnvVar('NON_EXISTENT_VAR', 'FALLBACK')
+        };
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        let html = '<h2>Environment Variable Test Results:</h2><ul>';
+
+        for (const [key, value] of Object.entries(results)) {
+            const status = value !== 'FALLBACK' ? '✅' : '❌';
+            html += `<li>${status} ${key}: <strong>${value}</strong></li>`;
+        }
+
+        html += '</ul>';
+        resultsDiv.innerHTML = html;
+
+        // Log to console
+        console.log('🧪 Test Results:', results);
+    </script>
+</body>
+</html>
