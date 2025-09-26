@@ -18,6 +18,7 @@ export interface ButtonProps {
   loading?: boolean;
   icon?: ReactNode;
   className?: string;
+  title?: string;
   'data-testid'?: string;
 }
 
@@ -30,6 +31,7 @@ export interface InputProps {
   type?: InputType;
   value: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
   placeholder?: string;
   label?: string;
   error?: string;

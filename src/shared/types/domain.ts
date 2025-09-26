@@ -22,3 +22,5 @@ export interface UrlUpdateData {
   original_url?: string;
   expires_at?: string;
 }
+
+export type UpdateUrlRequest = UrlUpdateData;
