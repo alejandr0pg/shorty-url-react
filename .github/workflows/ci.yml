@@ -523,7 +523,7 @@ jobs:
                       }
                     }, {
                       "Id": "API-Origin",
-                      "DomainName": "shrt-staging-alb-xxxxxx.us-east-1.elb.amazonaws.com",
+                      "DomainName": "shrt-production-alb-132772302.us-east-1.elb.amazonaws.com",
                       "CustomOriginConfig": {
                         "HTTPPort": 80,
                         "HTTPSPort": 443,
