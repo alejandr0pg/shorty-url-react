@@ -228,7 +228,7 @@ export const normalizeUrl = (url: string): string => {
   if (!url) return '';
 
   // First sanitize
-  let normalized = sanitizeUrl(url);
+  const normalized = sanitizeUrl(url);
 
   // Parse normalized URL
   const urlObj = new URL(normalized);

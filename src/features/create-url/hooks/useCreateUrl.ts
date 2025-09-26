@@ -6,7 +6,7 @@ import { useState, useCallback } from 'react';
 import { urlService } from '../../../core/api';
 import { validateUrl, sanitizeUrl } from '../../../shared/utils/urlValidator';
 import { UseCreateUrlResult } from '../../../shared/types';
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../core/constants/config';
+import { ERROR_MESSAGES } from '../../../core/constants/config';
 
 export const useCreateUrl = (): UseCreateUrlResult => {
   const [shortUrl, setShortUrl] = useState<string | null>(null);

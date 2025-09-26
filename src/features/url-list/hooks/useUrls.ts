@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { urlService } from '../../../core/api';
 import { Url, UseUrlsResult, UpdateUrlRequest } from '../../../shared/types';
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../../../core/constants/config';
+import { ERROR_MESSAGES } from '../../../core/constants/config';
 
 export const useUrls = (): UseUrlsResult => {
   const [urls, setUrls] = useState<Url[]>([]);

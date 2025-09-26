@@ -13,7 +13,7 @@ const CreateUrlPage: React.FC = () => {
   const [showResult, setShowResult] = useState(false);
   const { shortUrl, reset } = useCreateUrl();
 
-  const handleSuccess = (originalUrl: string) => {
+  const handleSuccess = (_originalUrl: string) => {
     setShowResult(true);
   };
 

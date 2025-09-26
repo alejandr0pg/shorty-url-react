@@ -57,7 +57,7 @@ describe('useCreateUrl', () => {
   });
 
   test('should set loading state during request', async () => {
-    let resolvePromise: (value: any) => void;
+    let resolvePromise: (value: unknown) => void;
     const promise = new Promise((resolve) => {
       resolvePromise = resolve;
     });
@@ -92,8 +92,10 @@ describe('useCreateUrl', () => {
 
     // Set some state first
     act(() => {
-      (result.current as any).error = 'Some error';
-      (result.current as any).result = { code: 'test' };
+      // Note: Direct state manipulation is not recommended in tests
+      // This should be done through the hook's interface instead
+      (result.current as { error: string; result: { code: string } | null }).error = 'Some error';
+      (result.current as { error: string; result: { code: string } | null }).result = { code: 'test' };
     });
 
     act(() => {
