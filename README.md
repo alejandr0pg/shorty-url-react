@@ -2,6 +2,12 @@
 
 Una aplicación React moderna para el servicio de acortamiento de URLs Shrt, construida con TypeScript, Vite y configurada para despliegue en AWS S3.
 
+## ✅ URLs del Frontend Desplegado
+- **Staging:** https://d2570b9eh3h8yc.cloudfront.net
+- **Production:** https://daaedpb6kov3c.cloudfront.net
+
+*Las distribuciones de CloudFront tardan 15-20 minutos en estar completamente activas.*
+
 ## 📋 Tabla de Contenidos
 
 - [Requisitos Previos](#requisitos-previos)
@@ -201,15 +207,28 @@ aws configure
 # Default output format: json
 ```
 
-### Paso 2: Crear Buckets S3
+### Paso 2: ✅ Buckets S3 (Ya Creados)
 
 ```bash
-# Crear buckets para cada entorno (reemplaza TU-DOMINIO con tu dominio real)
-aws s3 mb s3://TU-DOMINIO-frontend-staging --region us-east-1
-aws s3 mb s3://TU-DOMINIO-frontend-production --region us-east-1
+# Buckets S3 creados:
+tu-dominio-frontend-staging      # Staging environment
+tu-dominio-frontend-production   # Production environment
+tu-dominio-backups               # Backups storage
 
-# Verificar que se crearon correctamente
-aws s3 ls | grep TU-DOMINIO-frontend
+# Verificar buckets existentes
+aws s3 ls | grep tu-dominio-frontend
+```
+
+### Paso 2.1: CloudFront Distributions (Ya Creadas)
+
+```bash
+# Distribuciones CloudFront creadas:
+# Staging:    EMGOF3DHVN1IP  -> https://d2570b9eh3h8yc.cloudfront.net
+# Production: E2IC4GJDJKZPKW -> https://daaedpb6kov3c.cloudfront.net
+
+# Verificar estado de las distribuciones
+aws cloudfront get-distribution --id EMGOF3DHVN1IP --query 'Distribution.Status'
+aws cloudfront get-distribution --id E2IC4GJDJKZPKW --query 'Distribution.Status'
 ```
 
 ### Paso 3: Configurar Hosting Estático
