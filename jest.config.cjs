@@ -1,10 +1,6 @@
 module.exports = {
     testEnvironment: "jsdom",
     setupFilesAfterEnv: ["<rootDir>/src/setupTests.cjs"],
-    globals: {
-        TextEncoder: TextEncoder,
-        TextDecoder: TextDecoder,
-    },
     moduleNameMapper: {
         "\\.(css|less|scss|sass)$": "identity-obj-proxy",
         "^@/(.*)$": "<rootDir>/src/$1"

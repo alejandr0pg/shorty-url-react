@@ -52,7 +52,7 @@ describe('useCreateUrl', () => {
     });
 
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('Invalid URL');
+    expect(result.current.error).toBe('Invalid URL format. URL must follow the pattern: scheme://host[:port][/path]');
     expect(result.current.shortUrl).toBeNull();
   });
 

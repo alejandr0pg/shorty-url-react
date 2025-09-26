@@ -46,8 +46,12 @@ describe('URL Validator', () => {
       expect(result1.valid).toBe(true);
 
       const result2 = validateUrl('ftp://example.com');
-      expect(result2.valid).toBe(true); // FTP is valid but marked as uncommon
-      expect(result2.errors).toContain('Uncommon scheme: ftp. Common schemes are: http, https, ftp, ftps');
+      expect(result2.valid).toBe(true);
+      expect(result2.errors).toHaveLength(0); // FTP is a common scheme, no errors
+
+      const result3 = validateUrl('unknown://example.com');
+      expect(result3.valid).toBe(true); // Valid format but uncommon scheme
+      expect(result3.errors).toContain('Uncommon scheme: unknown. Common schemes are: http, https, ftp, ftps');
     });
   });
 
@@ -87,8 +91,8 @@ describe('URL Validator', () => {
     });
 
     test('should normalize paths', () => {
-      expect(normalizeUrl('https://example.com/path/')).toBe('https://example.com/path/');
-      expect(normalizeUrl('https://example.com//double//slashes')).toBe('https://example.com//double//slashes');
+      expect(normalizeUrl('https://example.com/path/')).toBe('https://example.com/path');
+      expect(normalizeUrl('https://example.com//double//slashes')).toBe('https://example.com/double/slashes');
     });
 
     test('should preserve root path', () => {
