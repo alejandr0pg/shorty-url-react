@@ -193,7 +193,7 @@ jobs:
     if: (github.ref == 'refs/heads/develop' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
     environment:
       name: staging
-      url: https://d2570b9eh3h8yc.cloudfront.net
+      url: https://d1mrphf40jf3dj.cloudfront.net
 
     steps:
     - name: Download Build Artifacts
@@ -336,7 +336,7 @@ jobs:
       run: |
         echo "🔍 Verificando deployment..."
         # Try CloudFront URL first, then fallback to S3 static website
-        CLOUDFRONT_URL="https://d2570b9eh3h8yc.cloudfront.net"
+        CLOUDFRONT_URL="https://d1mrphf40jf3dj.cloudfront.net"
         S3_URL="http://${{ env.S3_BUCKET_STAGING }}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
 
         for i in {1..10}; do
@@ -366,7 +366,7 @@ jobs:
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
     environment:
       name: production
-      url: https://daaedpb6kov3c.cloudfront.net
+      url: https://d3dcezd6ji3gto.cloudfront.net
 
     steps:
     - name: Download Build Artifacts
@@ -507,7 +507,7 @@ jobs:
     - name: Health Check & Smoke Tests
       run: |
         echo "🔍 Ejecutando health checks de producción..."
-        CLOUDFRONT_URL="https://daaedpb6kov3c.cloudfront.net"
+        CLOUDFRONT_URL="https://d3dcezd6ji3gto.cloudfront.net"
         S3_URL="http://${{ env.S3_BUCKET_PRODUCTION }}.s3-website-${{ env.AWS_REGION }}.amazonaws.com"
 
         echo "URLs de prueba:"
@@ -597,7 +597,7 @@ jobs:
       if: needs.deploy-staging.result == 'success'
       run: |
         lhci autorun \
-          --collect.url=https://d2570b9eh3h8yc.cloudfront.net \
+          --collect.url=https://d1mrphf40jf3dj.cloudfront.net \
           --upload.target=temporary-public-storage \
           --collect.numberOfRuns=3
       continue-on-error: true
@@ -606,7 +606,7 @@ jobs:
       if: needs.deploy-production.result == 'success'
       run: |
         lhci autorun \
-          --collect.url=https://daaedpb6kov3c.cloudfront.net \
+          --collect.url=https://d3dcezd6ji3gto.cloudfront.net \
           --upload.target=temporary-public-storage \
           --collect.numberOfRuns=5
       continue-on-error: true

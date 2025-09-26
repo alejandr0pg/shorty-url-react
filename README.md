@@ -5,12 +5,47 @@ Una aplicación React moderna para el servicio de acortamiento de URLs Shrt, con
 ## 🌐 URLs del Frontend Desplegado
 
 ### Producción
+- **CloudFront CDN:** https://d3dcezd6ji3gto.cloudfront.net
 - **S3 Website:** http://shrt-frontend-production.s3-website-us-east-1.amazonaws.com
 - **Bucket S3:** https://shrt-frontend-production.s3.amazonaws.com
+
+### Staging
+- **CloudFront CDN:** https://d1mrphf40jf3dj.cloudfront.net
+- **S3 Website:** http://shrt-frontend-staging.s3-website-us-east-1.amazonaws.com
 
 ### URLs del Backend Asociado
 - **Backend API Producción:** Pendiente de configurar dominio personalizado
 - **IP Pública del Backend:** Se asigna dinámicamente en ECS
+
+### CloudFront Distribution IDs
+- **Staging:** E2Q0FJ804E8MGI
+- **Production:** E1JT122OSSCK8R
+
+## 🔐 Configuración de GitHub Actions
+
+### GitHub Secrets Requeridos
+
+Ve a tu repositorio GitHub → Settings → Secrets and variables → Actions:
+
+```bash
+# Credenciales AWS (REQUERIDOS)
+AWS_ACCESS_KEY_ID=[TU_ACCESS_KEY_ID]
+AWS_SECRET_ACCESS_KEY=[TU_SECRET_ACCESS_KEY]
+
+# CloudFront Distribution IDs (REQUERIDOS para invalidación de cache)
+CLOUDFRONT_DISTRIBUTION_STAGING=E2Q0FJ804E8MGI
+CLOUDFRONT_DISTRIBUTION_PRODUCTION=E1JT122OSSCK8R
+```
+
+### Variables de Entorno del Proyecto
+
+Configuradas automáticamente en el workflow:
+
+```bash
+S3_BUCKET_STAGING=shrt-frontend-staging
+S3_BUCKET_PRODUCTION=shrt-frontend-production
+AWS_REGION=us-east-1
+```
 
 ## 📋 Tabla de Contenidos
 
