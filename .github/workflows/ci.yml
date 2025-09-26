@@ -222,12 +222,19 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
+          # Configure bucket to disable ACL enforcement
+          echo "Disabling ACL enforcement..."
+          aws s3api put-bucket-ownership-controls \
+            --bucket ${{ env.S3_BUCKET_STAGING }} \
+            --ownership-controls Rules='[{ObjectOwnership=BucketOwnerEnforced}]' \
+            || echo "⚠️ Could not disable ACL enforcement"
+
           # Try to disable Block Public Access settings
           echo "Attempting to configure public access settings..."
           aws s3api put-public-access-block \
             --bucket ${{ env.S3_BUCKET_STAGING }} \
             --public-access-block-configuration \
-            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
             || echo "⚠️ Could not modify public access settings"
 
           # Wait a moment for settings to propagate
@@ -245,7 +252,7 @@ jobs:
                 \"Action\": \"s3:GetObject\",
                 \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_STAGING }}/*\"
               }]
-            }" || echo "⚠️ Could not set bucket policy - files will be uploaded with public-read ACL instead"
+            }" || echo "⚠️ Could not set bucket policy - deployment may not be publicly accessible"
         else
           echo "S3 bucket ${{ env.S3_BUCKET_STAGING }} already exists"
         fi
@@ -257,7 +264,6 @@ jobs:
         # Sync archivos con cache de larga duración (assets estáticos)
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
           --delete \
-          --acl public-read \
           --cache-control "public, max-age=31536000, immutable" \
           --exclude "*.html" \
           --exclude "service-worker.js" \
@@ -266,7 +272,6 @@ jobs:
 
         # Subir HTML y service worker sin cache
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
-          --acl public-read \
           --cache-control "public, max-age=0, must-revalidate" \
           --include "*.html" \
           --include "service-worker.js" \
@@ -274,7 +279,6 @@ jobs:
 
         # Subir manifest y robots.txt con cache moderado
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
-          --acl public-read \
           --cache-control "public, max-age=86400" \
           --include "manifest.json" \
           --include "robots.txt" \
@@ -295,7 +299,6 @@ jobs:
 
           if [ ! -z "$content_type" ]; then
             aws s3 cp "$file" "s3://${{ env.S3_BUCKET_STAGING }}/$key" \
-              --acl public-read \
               --content-encoding gzip \
               --content-type "$content_type" \
               --cache-control "public, max-age=31536000, immutable"
@@ -378,12 +381,19 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
+          # Configure bucket to disable ACL enforcement
+          echo "Disabling ACL enforcement..."
+          aws s3api put-bucket-ownership-controls \
+            --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
+            --ownership-controls Rules='[{ObjectOwnership=BucketOwnerEnforced}]' \
+            || echo "⚠️ Could not disable ACL enforcement"
+
           # Try to disable Block Public Access settings
           echo "Attempting to configure public access settings..."
           aws s3api put-public-access-block \
             --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
             --public-access-block-configuration \
-            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
             || echo "⚠️ Could not modify public access settings"
 
           # Wait a moment for settings to propagate
@@ -401,7 +411,7 @@ jobs:
                 \"Action\": \"s3:GetObject\",
                 \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_PRODUCTION }}/*\"
               }]
-            }" || echo "⚠️ Could not set bucket policy - files will be uploaded with public-read ACL instead"
+            }" || echo "⚠️ Could not set bucket policy - deployment may not be publicly accessible"
         else
           echo "S3 bucket ${{ env.S3_BUCKET_PRODUCTION }} already exists"
         fi
@@ -409,8 +419,17 @@ jobs:
     - name: Create Backup
       run: |
         echo "📦 Creando backup del deployment anterior..."
-        BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
-        aws s3 sync s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}-backups/$BACKUP_NAME/ || true
+        if aws s3api head-bucket --bucket ${{ env.S3_BUCKET_PRODUCTION }} 2>/dev/null; then
+          if aws s3 ls s3://${{ env.S3_BUCKET_PRODUCTION }}/ 2>/dev/null | head -1; then
+            BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
+            echo "Creating backup: $BACKUP_NAME"
+            aws s3 sync s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}-backups/$BACKUP_NAME/ || echo "⚠️ Could not create backup"
+          else
+            echo "Bucket is empty, no backup needed"
+          fi
+        else
+          echo "Bucket does not exist yet, no backup needed"
+        fi
 
     - name: Deploy to S3 Production
       run: |
@@ -419,7 +438,6 @@ jobs:
         # Sync con configuración de cache optimizada para producción
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
           --delete \
-          --acl public-read \
           --cache-control "public, max-age=31536000, immutable" \
           --exclude "*.html" \
           --exclude "service-worker.js" \
@@ -429,7 +447,6 @@ jobs:
 
         # HTML y service worker sin cache
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-          --acl public-read \
           --cache-control "public, max-age=0, must-revalidate" \
           --include "*.html" \
           --include "service-worker.js" \
@@ -437,7 +454,6 @@ jobs:
 
         # Archivos SEO y manifest con cache de 1 día
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-          --acl public-read \
           --cache-control "public, max-age=86400" \
           --include "manifest.json" \
           --include "robots.txt" \
