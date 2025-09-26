@@ -22,7 +22,7 @@ on:
         type: boolean
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   AWS_REGION: us-east-1
   S3_BUCKET_STAGING: shrt-frontend-staging
   S3_BUCKET_PRODUCTION: shrt-frontend-production
@@ -61,7 +61,7 @@ jobs:
           ${{ runner.os }}-node-
 
     - name: Install Dependencies
-      run: npm ci --prefer-offline --no-audit --legacy-peer-deps
+      run: npm install --prefer-offline --no-audit --legacy-peer-deps
 
     - name: Lint Code
       run: npm run lint
@@ -79,6 +79,13 @@ jobs:
         flags: frontend
         name: frontend-coverage
         fail_ci_if_error: false
+
+    - name: Upload package-lock.json
+      uses: actions/upload-artifact@v4
+      with:
+        name: package-lock-${{ github.sha }}
+        path: package-lock.json
+        retention-days: 1
 
     - name: SonarCloud Analysis
       uses: SonarSource/sonarcloud-github-action@master
@@ -108,6 +115,12 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+
+    - name: Download package-lock.json
+      uses: actions/download-artifact@v4
+      with:
+        name: package-lock-${{ github.sha }}
+        path: .
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
