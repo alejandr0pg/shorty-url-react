@@ -222,18 +222,30 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
-          # Set bucket policy for public read access
+          # Try to disable Block Public Access settings
+          echo "Attempting to configure public access settings..."
+          aws s3api put-public-access-block \
+            --bucket ${{ env.S3_BUCKET_STAGING }} \
+            --public-access-block-configuration \
+            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            || echo "⚠️ Could not modify public access settings"
+
+          # Wait a moment for settings to propagate
+          sleep 5
+
+          # Try to set bucket policy for public read access
+          echo "Attempting to set bucket policy..."
           aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_STAGING }} \
-            --policy '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Sid": "PublicReadGetObject",
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": "s3:GetObject",
-                "Resource": "arn:aws:s3:::${{ env.S3_BUCKET_STAGING }}/*"
+            --policy "{
+              \"Version\": \"2012-10-17\",
+              \"Statement\": [{
+                \"Sid\": \"PublicReadGetObject\",
+                \"Effect\": \"Allow\",
+                \"Principal\": \"*\",
+                \"Action\": \"s3:GetObject\",
+                \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_STAGING }}/*\"
               }]
-            }'
+            }" || echo "⚠️ Could not set bucket policy - files will be uploaded with public-read ACL instead"
         else
           echo "S3 bucket ${{ env.S3_BUCKET_STAGING }} already exists"
         fi
@@ -245,6 +257,7 @@ jobs:
         # Sync archivos con cache de larga duración (assets estáticos)
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
           --delete \
+          --acl public-read \
           --cache-control "public, max-age=31536000, immutable" \
           --exclude "*.html" \
           --exclude "service-worker.js" \
@@ -253,6 +266,7 @@ jobs:
 
         # Subir HTML y service worker sin cache
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --acl public-read \
           --cache-control "public, max-age=0, must-revalidate" \
           --include "*.html" \
           --include "service-worker.js" \
@@ -260,6 +274,7 @@ jobs:
 
         # Subir manifest y robots.txt con cache moderado
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --acl public-read \
           --cache-control "public, max-age=86400" \
           --include "manifest.json" \
           --include "robots.txt" \
@@ -280,6 +295,7 @@ jobs:
 
           if [ ! -z "$content_type" ]; then
             aws s3 cp "$file" "s3://${{ env.S3_BUCKET_STAGING }}/$key" \
+              --acl public-read \
               --content-encoding gzip \
               --content-type "$content_type" \
               --cache-control "public, max-age=31536000, immutable"
@@ -362,18 +378,30 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
-          # Set bucket policy for public read access
+          # Try to disable Block Public Access settings
+          echo "Attempting to configure public access settings..."
+          aws s3api put-public-access-block \
+            --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
+            --public-access-block-configuration \
+            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            || echo "⚠️ Could not modify public access settings"
+
+          # Wait a moment for settings to propagate
+          sleep 5
+
+          # Try to set bucket policy for public read access
+          echo "Attempting to set bucket policy..."
           aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
-            --policy '{
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Sid": "PublicReadGetObject",
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": "s3:GetObject",
-                "Resource": "arn:aws:s3:::${{ env.S3_BUCKET_PRODUCTION }}/*"
+            --policy "{
+              \"Version\": \"2012-10-17\",
+              \"Statement\": [{
+                \"Sid\": \"PublicReadGetObject\",
+                \"Effect\": \"Allow\",
+                \"Principal\": \"*\",
+                \"Action\": \"s3:GetObject\",
+                \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_PRODUCTION }}/*\"
               }]
-            }'
+            }" || echo "⚠️ Could not set bucket policy - files will be uploaded with public-read ACL instead"
         else
           echo "S3 bucket ${{ env.S3_BUCKET_PRODUCTION }} already exists"
         fi
@@ -391,6 +419,7 @@ jobs:
         # Sync con configuración de cache optimizada para producción
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
           --delete \
+          --acl public-read \
           --cache-control "public, max-age=31536000, immutable" \
           --exclude "*.html" \
           --exclude "service-worker.js" \
@@ -400,6 +429,7 @@ jobs:
 
         # HTML y service worker sin cache
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --acl public-read \
           --cache-control "public, max-age=0, must-revalidate" \
           --include "*.html" \
           --include "service-worker.js" \
@@ -407,6 +437,7 @@ jobs:
 
         # Archivos SEO y manifest con cache de 1 día
         aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --acl public-read \
           --cache-control "public, max-age=86400" \
           --include "manifest.json" \
           --include "robots.txt" \
