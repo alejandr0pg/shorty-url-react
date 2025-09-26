@@ -34,6 +34,14 @@
         {
           "name": "APP_DEBUG",
           "value": "false"
+        },
+        {
+          "name": "LOG_CHANNEL",
+          "value": "stderr"
+        },
+        {
+          "name": "APP_URL",
+          "value": "http://localhost:8000"
         }
       ]
     }

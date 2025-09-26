@@ -2,11 +2,15 @@
 
 Una aplicación React moderna para el servicio de acortamiento de URLs Shrt, construida con TypeScript, Vite y configurada para despliegue en AWS S3.
 
-## ✅ URLs del Frontend Desplegado
-- **Staging:** https://d2570b9eh3h8yc.cloudfront.net
-- **Production:** https://daaedpb6kov3c.cloudfront.net
+## 🌐 URLs del Frontend Desplegado
 
-*Las distribuciones de CloudFront tardan 15-20 minutos en estar completamente activas.*
+### Producción
+- **S3 Website:** http://shrt-frontend-production.s3-website-us-east-1.amazonaws.com
+- **Bucket S3:** https://shrt-frontend-production.s3.amazonaws.com
+
+### URLs del Backend Asociado
+- **Backend API Producción:** Pendiente de configurar dominio personalizado
+- **IP Pública del Backend:** Se asigna dinámicamente en ECS
 
 ## 📋 Tabla de Contenidos
 
@@ -190,6 +194,75 @@ npm run deploy:staging
 npm run deploy:production
 ```
 
+## 🚀 Deployment Completo desde Cero
+
+### Comandos para Deployment Inicial
+
+```bash
+# 1. Configurar AWS CLI
+aws configure
+# AWS Access Key ID: [TU_ACCESS_KEY]
+# AWS Secret Access Key: [TU_SECRET_KEY]
+# Default region: us-east-1
+# Default output format: json
+
+# 2. Crear buckets S3
+aws s3 mb s3://shrt-frontend-production
+aws s3 mb s3://shrt-frontend-staging
+
+# 3. Configurar buckets para hosting estático
+aws s3 website s3://shrt-frontend-production \
+  --index-document index.html \
+  --error-document index.html
+
+aws s3 website s3://shrt-frontend-staging \
+  --index-document index.html \
+  --error-document index.html
+
+# 4. Configurar permisos públicos (deshabilitar Block Public Access)
+aws s3api put-public-access-block \
+  --bucket shrt-frontend-production \
+  --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+aws s3api put-public-access-block \
+  --bucket shrt-frontend-staging \
+  --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+# 5. Aplicar políticas de bucket para acceso público
+aws s3api put-bucket-policy --bucket shrt-frontend-production --policy '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::shrt-frontend-production/*"
+    }
+  ]
+}'
+
+aws s3api put-bucket-policy --bucket shrt-frontend-staging --policy '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::shrt-frontend-staging/*"
+    }
+  ]
+}'
+
+# 6. Construir y desplegar la aplicación
+npm run build:production
+aws s3 sync dist/ s3://shrt-frontend-production --delete
+
+# 7. Verificar el despliegue
+echo "Frontend disponible en: http://shrt-frontend-production.s3-website-us-east-1.amazonaws.com"
+```
+
 ## ☁️ Configuración de AWS
 
 ### Paso 1: Configurar AWS CLI
@@ -207,16 +280,27 @@ aws configure
 # Default output format: json
 ```
 
-### Paso 2: ✅ Buckets S3 (Ya Creados)
+### Paso 2: Crear Buckets S3
 
 ```bash
-# Buckets S3 creados:
-tu-dominio-frontend-staging      # Staging environment
-tu-dominio-frontend-production   # Production environment
-tu-dominio-backups               # Backups storage
+# Crear bucket de producción
+aws s3 mb s3://shrt-frontend-production
 
-# Verificar buckets existentes
-aws s3 ls | grep tu-dominio-frontend
+# Crear bucket de staging
+aws s3 mb s3://shrt-frontend-staging
+
+# Verificar buckets creados
+aws s3 ls | grep shrt-frontend
+
+# Configurar bucket de producción para hosting estático
+aws s3 website s3://shrt-frontend-production \
+  --index-document index.html \
+  --error-document index.html
+
+# Configurar bucket de staging para hosting estático
+aws s3 website s3://shrt-frontend-staging \
+  --index-document index.html \
+  --error-document index.html
 ```
 
 ### Paso 2.1: CloudFront Distributions (Ya Creadas)
