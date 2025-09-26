@@ -261,28 +261,42 @@ jobs:
       run: |
         echo "🚀 Deploying to staging environment..."
 
-        # Sync archivos con cache de larga duración (assets estáticos)
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
-          --delete \
-          --cache-control "public, max-age=31536000, immutable" \
+        # Deploy all files with proper cache settings
+        echo "🚀 Deploying to S3..."
+
+        # First, sync all files
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ --delete
+
+        # Then set cache-control for assets (non-HTML files)
+        aws s3 cp s3://${{ env.S3_BUCKET_STAGING }}/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --recursive \
           --exclude "*.html" \
           --exclude "service-worker.js" \
           --exclude "manifest.json" \
-          --exclude "robots.txt"
+          --exclude "robots.txt" \
+          --cache-control "public, max-age=31536000, immutable" \
+          --metadata-directive REPLACE
 
-        # Subir HTML y service worker sin cache
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
-          --cache-control "public, max-age=0, must-revalidate" \
+        # Set cache-control for HTML files (no cache)
+        aws s3 cp s3://${{ env.S3_BUCKET_STAGING }}/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --recursive \
           --include "*.html" \
           --include "service-worker.js" \
-          --exclude "*"
+          --exclude "*" \
+          --cache-control "public, max-age=0, must-revalidate" \
+          --metadata-directive REPLACE
 
-        # Subir manifest y robots.txt con cache moderado
-        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
-          --cache-control "public, max-age=86400" \
+        # Set cache-control for SEO files (moderate cache)
+        aws s3 cp s3://${{ env.S3_BUCKET_STAGING }}/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --recursive \
           --include "manifest.json" \
           --include "robots.txt" \
-          --exclude "*"
+          --exclude "*" \
+          --cache-control "public, max-age=86400" \
+          --metadata-directive REPLACE \
+          || echo "⚠️ No SEO files found to configure"
+
+        echo "✅ All files deployed successfully"
 
         # Configurar headers específicos para archivos comprimidos
         for file in $(find dist -name "*.gz" -type f); do
@@ -381,31 +395,20 @@ jobs:
               "ErrorDocument": {"Key": "index.html"}
             }'
 
-          # Try to disable Block Public Access settings first
-          echo "Attempting to configure public access settings..."
-          if aws s3api put-public-access-block \
+          # Configure public access settings
+          echo "Configuring public access settings..."
+          aws s3api put-public-access-block \
             --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
             --public-access-block-configuration \
-            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"; then
-            echo "✅ Public access settings configured"
-
-            # Configure bucket ownership to allow ACLs
-            echo "Configuring bucket ownership to allow ACLs..."
-            aws s3api put-bucket-ownership-controls \
-              --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
-              --ownership-controls Rules='[{ObjectOwnership=BucketOwnerPreferred}]' \
-              || echo "⚠️ Could not set bucket ownership"
-          else
-            echo "⚠️ Could not modify public access settings - using bucket policy only"
-          fi
+            "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false" \
+            || echo "⚠️ Could not modify public access settings"
 
           # Wait a moment for settings to propagate
           sleep 5
 
-          # Try to set bucket policy for public read access
-          echo "Attempting to set bucket policy..."
-          POLICY_SUCCESS=false
-          if aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
+          # Set bucket policy for public read access
+          echo "Setting bucket policy for public access..."
+          aws s3api put-bucket-policy --bucket ${{ env.S3_BUCKET_PRODUCTION }} \
             --policy "{
               \"Version\": \"2012-10-17\",
               \"Statement\": [{
@@ -415,17 +418,7 @@ jobs:
                 \"Action\": \"s3:GetObject\",
                 \"Resource\": \"arn:aws:s3:::${{ env.S3_BUCKET_PRODUCTION }}/*\"
               }]
-            }"; then
-            echo "✅ Bucket policy set successfully"
-            POLICY_SUCCESS=true
-          else
-            echo "⚠️ Could not set bucket policy - trying alternative approach"
-          fi
-
-          # If bucket policy failed, try to set individual file permissions later
-          if [ "$POLICY_SUCCESS" = false ]; then
-            echo "export BUCKET_POLICY_FAILED=true" >> $GITHUB_ENV
-          fi
+            }" && echo "✅ Bucket policy applied successfully" || echo "⚠️ Could not set bucket policy"
         else
           echo "S3 bucket ${{ env.S3_BUCKET_PRODUCTION }} already exists"
         fi
@@ -449,65 +442,44 @@ jobs:
       run: |
         echo "🚀 Deploying to production environment..."
 
-        # Deploy with ACLs (try first) or fallback to bucket policy
-        echo "🚀 Attempting deployment with public-read ACL..."
+        # Deploy all files with proper cache settings
+        echo "🚀 Deploying to S3..."
 
-        # Try to sync with ACL
-        if aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-          --delete \
-          --acl public-read \
-          --cache-control "public, max-age=31536000, immutable" \
+        # First, sync all files
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ --delete
+
+        # Then set cache-control for assets (non-HTML files)
+        aws s3 cp s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --recursive \
           --exclude "*.html" \
           --exclude "service-worker.js" \
           --exclude "manifest.json" \
           --exclude "robots.txt" \
-          --exclude "sitemap.xml" 2>/dev/null; then
+          --exclude "sitemap.xml" \
+          --cache-control "public, max-age=31536000, immutable" \
+          --metadata-directive REPLACE
 
-          echo "✅ Deployed assets with ACL"
+        # Set cache-control for HTML files (no cache)
+        aws s3 cp s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --recursive \
+          --include "*.html" \
+          --include "service-worker.js" \
+          --exclude "*" \
+          --cache-control "public, max-age=0, must-revalidate" \
+          --metadata-directive REPLACE
 
-          # HTML and service worker with ACL
-          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-            --acl public-read \
-            --cache-control "public, max-age=0, must-revalidate" \
-            --include "*.html" \
-            --include "service-worker.js" \
-            --exclude "*"
+        # Set cache-control for SEO files (moderate cache)
+        aws s3 cp s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --recursive \
+          --include "manifest.json" \
+          --include "robots.txt" \
+          --include "sitemap.xml" \
+          --exclude "*" \
+          --cache-control "public, max-age=86400" \
+          --metadata-directive REPLACE \
+          || echo "⚠️ No SEO files found to configure"
 
-          # SEO files with ACL
-          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-            --acl public-read \
-            --cache-control "public, max-age=86400" \
-            --include "manifest.json" \
-            --include "robots.txt" \
-            --include "sitemap.xml" \
-            --exclude "*"
-
-        else
-          echo "⚠️ ACL deployment failed, trying without ACL..."
-
-          # Fallback: sync without ACL
-          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-            --delete \
-            --cache-control "public, max-age=31536000, immutable" \
-            --exclude "*.html" \
-            --exclude "service-worker.js" \
-            --exclude "manifest.json" \
-            --exclude "robots.txt" \
-            --exclude "sitemap.xml"
-
-          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-            --cache-control "public, max-age=0, must-revalidate" \
-            --include "*.html" \
-            --include "service-worker.js" \
-            --exclude "*"
-
-          aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
-            --cache-control "public, max-age=86400" \
-            --include "manifest.json" \
-            --include "robots.txt" \
-            --include "sitemap.xml" \
-            --exclude "*"
-        fi
+        echo "✅ All files deployed successfully"
 
 
     - name: Invalidate CloudFront Cache
