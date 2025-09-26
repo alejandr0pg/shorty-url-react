@@ -34,7 +34,7 @@
     "MaxTTL": 31536000,
     "Compress": true
   },
-  "CustomErrorPages": {
+  "CustomErrorResponses": {
     "Quantity": 1,
     "Items": [
       {
