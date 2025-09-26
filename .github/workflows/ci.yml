@@ -1,0 +1,461 @@
+name: Frontend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+  AWS_REGION: us-east-1
+  S3_BUCKET_STAGING: shrt-frontend-staging
+  S3_BUCKET_PRODUCTION: shrt-frontend-production
+
+jobs:
+  # Job para análisis de código y tests
+  quality-checks:
+    name: Code Quality & Tests
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+
+    outputs:
+      cache-key: ${{ steps.cache.outputs.cache-hit }}
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Cache Dependencies
+      id: cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          node_modules
+          ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install Dependencies
+      run: npm ci --prefer-offline --no-audit
+
+    - name: Lint Code
+      run: npm run lint
+
+    - name: Type Check
+      run: npm run typecheck
+
+    - name: Run Unit Tests
+      run: npm test -- --coverage --watchAll=false --maxWorkers=2
+
+    - name: Upload Coverage Reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+        fail_ci_if_error: false
+
+    - name: SonarCloud Analysis
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      continue-on-error: true
+
+  # Job para construir la aplicación
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    if: always() && (needs.quality-checks.result == 'success' || inputs.skip_tests)
+
+    strategy:
+      matrix:
+        environment: [staging, production]
+        include:
+          - environment: staging
+            api_url: https://staging-api.tu-dominio.com
+            deploy_condition: github.ref == 'refs/heads/develop'
+          - environment: production
+            api_url: https://api.tu-dominio.com
+            deploy_condition: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Restore Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          node_modules
+          ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Install Dependencies
+      run: npm ci --prefer-offline --no-audit --omit=dev
+
+    - name: Setup Environment Variables
+      run: |
+        echo "VITE_API_URL=${{ matrix.api_url }}" >> .env.${{ matrix.environment }}
+        echo "VITE_APP_ENV=${{ matrix.environment }}" >> .env.${{ matrix.environment }}
+        echo "VITE_APP_VERSION=${GITHUB_SHA:0:7}" >> .env.${{ matrix.environment }}
+        echo "VITE_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> .env.${{ matrix.environment }}
+
+        if [ "${{ matrix.environment }}" == "production" ]; then
+          echo "VITE_ENABLE_DEBUG=false" >> .env.${{ matrix.environment }}
+          echo "VITE_ENABLE_ANALYTICS=true" >> .env.${{ matrix.environment }}
+          echo "VITE_ENABLE_MONITORING=true" >> .env.${{ matrix.environment }}
+        else
+          echo "VITE_ENABLE_DEBUG=true" >> .env.${{ matrix.environment }}
+          echo "VITE_ENABLE_ANALYTICS=true" >> .env.${{ matrix.environment }}
+          echo "VITE_SHOW_PERFORMANCE_METRICS=true" >> .env.${{ matrix.environment }}
+        fi
+
+    - name: Build Application
+      run: npm run build:${{ matrix.environment }}
+
+    - name: Optimize Build Output
+      run: |
+        # Comprimir archivos estáticos para mejorar performance
+        find dist -name "*.js" -o -name "*.css" -o -name "*.html" -o -name "*.json" | \
+        while read file; do
+          gzip -c "$file" > "${file}.gz"
+          echo "Compressed: $file -> ${file}.gz"
+        done
+
+        # Generar manifest de archivos para cache busting
+        find dist -type f -exec md5sum {} \; > dist/manifest.txt
+
+    - name: Run Bundle Analysis
+      if: matrix.environment == 'production'
+      run: |
+        npm run analyze
+        ls -la dist/
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.environment }}-${{ github.sha }}
+        path: dist/
+        retention-days: 7
+        compression-level: 9
+
+  # Job para deploy a staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [quality-checks, build]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.tu-dominio.com
+
+    steps:
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-staging-${{ github.sha }}
+        path: dist
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy to S3 Staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+
+        # Sync archivos con cache de larga duración (assets estáticos)
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --delete \
+          --cache-control "public, max-age=31536000, immutable" \
+          --exclude "*.html" \
+          --exclude "service-worker.js" \
+          --exclude "manifest.json" \
+          --exclude "robots.txt"
+
+        # Subir HTML y service worker sin cache
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --cache-control "public, max-age=0, must-revalidate" \
+          --include "*.html" \
+          --include "service-worker.js" \
+          --exclude "*"
+
+        # Subir manifest y robots.txt con cache moderado
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_STAGING }}/ \
+          --cache-control "public, max-age=86400" \
+          --include "manifest.json" \
+          --include "robots.txt" \
+          --exclude "*"
+
+        # Configurar headers específicos para archivos comprimidos
+        for file in $(find dist -name "*.gz" -type f); do
+          key="${file#dist/}"
+          key="${key%.gz}"
+
+          content_type=""
+          case "$key" in
+            *.js) content_type="application/javascript" ;;
+            *.css) content_type="text/css" ;;
+            *.html) content_type="text/html" ;;
+            *.json) content_type="application/json" ;;
+          esac
+
+          if [ ! -z "$content_type" ]; then
+            aws s3 cp "$file" "s3://${{ env.S3_BUCKET_STAGING }}/$key" \
+              --content-encoding gzip \
+              --content-type "$content_type" \
+              --cache-control "public, max-age=31536000, immutable"
+          fi
+        done
+
+    - name: Invalidate CloudFront Cache
+      if: env.CLOUDFRONT_DISTRIBUTION_STAGING
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_STAGING }} \
+          --paths "/*" \
+          --query 'Invalidation.Id' \
+          --output text
+
+    - name: Health Check
+      run: |
+        echo "🔍 Verificando deployment..."
+        STAGING_URL="https://staging.tu-dominio.com"
+
+        for i in {1..10}; do
+          if curl -f -s "$STAGING_URL/health" > /dev/null; then
+            echo "✅ Staging deployment verificado exitosamente"
+            exit 0
+          fi
+          echo "Intento $i/10: Esperando deployment..."
+          sleep 10
+        done
+        echo "❌ Verificación de staging falló"
+        exit 1
+
+  # Job para deploy a producción
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [quality-checks, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://tu-dominio.com
+
+    steps:
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: build-production-${{ github.sha }}
+        path: dist
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Create Backup
+      run: |
+        echo "📦 Creando backup del deployment anterior..."
+        BACKUP_NAME="backup-$(date +%Y%m%d-%H%M%S)"
+        aws s3 sync s3://${{ env.S3_BUCKET_PRODUCTION }}/ s3://${{ env.S3_BUCKET_PRODUCTION }}-backups/$BACKUP_NAME/ || true
+
+    - name: Deploy to S3 Production
+      run: |
+        echo "🚀 Deploying to production environment..."
+
+        # Sync con configuración de cache optimizada para producción
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --delete \
+          --cache-control "public, max-age=31536000, immutable" \
+          --exclude "*.html" \
+          --exclude "service-worker.js" \
+          --exclude "manifest.json" \
+          --exclude "robots.txt" \
+          --exclude "sitemap.xml"
+
+        # HTML y service worker sin cache
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --cache-control "public, max-age=0, must-revalidate" \
+          --include "*.html" \
+          --include "service-worker.js" \
+          --exclude "*"
+
+        # Archivos SEO y manifest con cache de 1 día
+        aws s3 sync dist/ s3://${{ env.S3_BUCKET_PRODUCTION }}/ \
+          --cache-control "public, max-age=86400" \
+          --include "manifest.json" \
+          --include "robots.txt" \
+          --include "sitemap.xml" \
+          --exclude "*"
+
+    - name: Invalidate CloudFront Cache
+      run: |
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_PRODUCTION }} \
+          --paths "/*" \
+          --query 'Invalidation.Id' \
+          --output text)
+
+        echo "🔄 CloudFront invalidation creada: $INVALIDATION_ID"
+
+        # Esperar que se complete la invalidación
+        aws cloudfront wait invalidation-completed \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_PRODUCTION }} \
+          --id $INVALIDATION_ID
+
+        echo "✅ Invalidación de CloudFront completada"
+
+    - name: Health Check & Smoke Tests
+      run: |
+        echo "🔍 Ejecutando health checks de producción..."
+        PRODUCTION_URL="https://tu-dominio.com"
+
+        # Health check básico
+        for i in {1..15}; do
+          if curl -f -s "$PRODUCTION_URL/health" > /dev/null; then
+            echo "✅ Health check básico pasó"
+            break
+          fi
+          if [ $i -eq 15 ]; then
+            echo "❌ Health check básico falló"
+            exit 1
+          fi
+          echo "Intento $i/15: Esperando deployment..."
+          sleep 10
+        done
+
+        # Smoke tests
+        if curl -f -s "$PRODUCTION_URL/" | grep -q "Shrt"; then
+          echo "✅ Smoke test: Página principal carga correctamente"
+        else
+          echo "❌ Smoke test: Página principal falló"
+          exit 1
+        fi
+
+        # Verificar que los assets estáticos cargan
+        if curl -f -s "$PRODUCTION_URL/assets/" | head -c1 | wc -c | grep -q 1; then
+          echo "✅ Smoke test: Assets estáticos accesibles"
+        else
+          echo "⚠️ Warning: No se pudieron verificar los assets estáticos"
+        fi
+
+  # Job para análisis de performance post-deployment
+  performance-audit:
+    name: Performance Audit
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install Lighthouse CI
+      run: npm install -g @lhci/cli@0.12.x
+
+    - name: Run Lighthouse CI - Staging
+      if: needs.deploy-staging.result == 'success'
+      run: |
+        lhci autorun \
+          --collect.url=https://staging.tu-dominio.com \
+          --upload.target=temporary-public-storage \
+          --collect.numberOfRuns=3
+      continue-on-error: true
+
+    - name: Run Lighthouse CI - Production
+      if: needs.deploy-production.result == 'success'
+      run: |
+        lhci autorun \
+          --collect.url=https://tu-dominio.com \
+          --upload.target=temporary-public-storage \
+          --collect.numberOfRuns=5
+      continue-on-error: true
+
+  # Job para notificaciones
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production, performance-audit]
+    if: always()
+
+    steps:
+    - name: Prepare Notification
+      id: prepare
+      run: |
+        STATUS="✅ Éxito"
+        if [[ "${{ needs.deploy-staging.result }}" == "failure" ]] || [[ "${{ needs.deploy-production.result }}" == "failure" ]]; then
+          STATUS="❌ Falló"
+        fi
+
+        ENVIRONMENT="ninguno"
+        if [[ "${{ needs.deploy-staging.result }}" == "success" ]]; then
+          ENVIRONMENT="staging"
+        fi
+        if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
+          if [ "$ENVIRONMENT" == "staging" ]; then
+            ENVIRONMENT="staging y production"
+          else
+            ENVIRONMENT="production"
+          fi
+        fi
+
+        echo "status=$STATUS" >> $GITHUB_OUTPUT
+        echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+
+    - name: Notify Status
+      run: |
+        echo "🚀 Frontend Deployment Status: ${{ steps.prepare.outputs.status }}"
+        echo "🌍 Entornos desplegados: ${{ steps.prepare.outputs.environment }}"
+        echo "📊 Performance audit: ${{ needs.performance-audit.result }}"
+        echo "🔗 Commit: ${{ github.sha }}"
+        echo "👤 Actor: ${{ github.actor }}"
+
+        # Aquí se podría integrar con Slack, Discord, Teams, etc.
+        # curl -X POST -H 'Content-type: application/json' \
+        #   --data "{\"text\":\"Frontend deployment completed: ${{ steps.prepare.outputs.status }}\"}" \
+        #   ${{ secrets.SLACK_WEBHOOK_URL }}
