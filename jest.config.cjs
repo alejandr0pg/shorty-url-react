@@ -1,6 +1,6 @@
-export default {
+module.exports = {
     testEnvironment: "jsdom",
-    setupFilesAfterEnv: ["<rootDir>/src/setupTests.js"],
+    setupFilesAfterEnv: ["<rootDir>/src/setupTests.cjs"],
     globals: {
         TextEncoder: TextEncoder,
         TextDecoder: TextDecoder,
