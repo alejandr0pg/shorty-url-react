@@ -61,7 +61,7 @@ jobs:
           ${{ runner.os }}-node-
 
     - name: Install Dependencies
-      run: npm ci --prefer-offline --no-audit
+      run: npm ci --prefer-offline --no-audit --legacy-peer-deps
 
     - name: Lint Code
       run: npm run lint
@@ -124,7 +124,7 @@ jobs:
         key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
     - name: Install Dependencies
-      run: npm ci --prefer-offline --no-audit --omit=dev
+      run: npm ci --prefer-offline --no-audit --legacy-peer-deps --omit=dev
 
     - name: Setup Environment Variables
       run: |
